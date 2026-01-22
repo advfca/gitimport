@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { AppStatus, GithubRepo, AnalysisResult, GithubFile, ExampleRepo, GoogleUser, ProjectLog } from './types';
-import { fetchRepoInfo, fetchRepoContents, fetchFileRaw, fetchFullTree, updateFileContent } from './services/githubService';
+import { fetchRepoInfo, fetchRepoContents, fetchFileRaw, fetchFullTree, updateFileContent, moveOrRenameFile } from './services/githubService';
 import { analyzeProject, askAboutFile } from './services/geminiService';
 import { createDriveFolder, uploadToDrive } from './services/googleDriveService';
 import RepoInput from './components/RepoInput';
@@ -29,7 +29,7 @@ const App: React.FC = () => {
   
   // Storage states
   const [history, setHistory] = useState<ProjectLog[]>(() => {
-    const saved = localStorage.getItem('gitmind_history');
+    const saved = localStorage.getItem('arquicode_history') || localStorage.getItem('gitmind_history');
     return saved ? JSON.parse(saved) : [];
   });
   
@@ -38,7 +38,7 @@ const App: React.FC = () => {
   const [cloneProgress, setCloneProgress] = useState<string>('');
 
   useEffect(() => {
-    localStorage.setItem('gitmind_history', JSON.stringify(history));
+    localStorage.setItem('arquicode_history', JSON.stringify(history));
   }, [history]);
 
   useEffect(() => {
@@ -69,7 +69,6 @@ const App: React.FC = () => {
     setGhToken('');
     setGoogleUser(null);
     setIsUserMenuOpen(false);
-    // Opcionalmente limpar histórico: setHistory([]);
   };
 
   const handleImport = async (url: string) => {
@@ -129,7 +128,7 @@ const App: React.FC = () => {
         selectedFile.path,
         newContent,
         selectedFile.sha!,
-        `AI Suggestion: Alterado via GitMind Explorer`
+        `AI Suggestion: Alterado via ArquiCode Explorer`
       );
       
       setFileContent(newContent);
@@ -138,6 +137,58 @@ const App: React.FC = () => {
     } catch (err: any) {
       setError(`Erro ao commitar: ${err.message}`);
       setStatus(AppStatus.READY);
+    }
+  };
+
+  const handleMoveOrRename = async (file: GithubFile, isRename: boolean) => {
+    if (!ghToken || !repo) {
+      alert("Você precisa configurar um GitHub Token no menu de usuário para realizar esta ação.");
+      return;
+    }
+
+    const promptText = isRename 
+      ? `Novo nome para "${file.name}":` 
+      : `Mover "${file.path}" para (caminho completo):`;
+    
+    const defaultValue = isRename ? file.name : file.path;
+    const input = prompt(promptText, defaultValue);
+    
+    if (!input || input === defaultValue) return;
+
+    let newPath = input;
+    if (isRename) {
+      const parts = file.path.split('/');
+      parts.pop();
+      newPath = parts.length > 0 ? `${parts.join('/')}/${input}` : input;
+    }
+
+    try {
+      setStatus(AppStatus.COMMITTING);
+      // Precisamos do conteúdo para recriar o arquivo no novo caminho
+      const content = await fetchFileRaw(file.download_url!);
+      
+      await moveOrRenameFile(
+        ghToken,
+        repo.owner.login,
+        repo.name,
+        file.path,
+        newPath,
+        file.sha!,
+        content,
+        `${isRename ? 'Renaming' : 'Moving'} ${file.path} to ${newPath}`
+      );
+
+      // Atualiza a lista de arquivos
+      const newFiles = await fetchRepoContents(repo.owner.login, repo.name, currentPath);
+      setFiles(newFiles);
+      if (selectedFile?.path === file.path) setSelectedFile(null);
+      
+      setStatus(AppStatus.READY);
+      alert("Ação concluída com sucesso!");
+    } catch (err: any) {
+      setError(err.message);
+      setStatus(AppStatus.READY);
+      alert(`Falha na operação: ${err.message}`);
     }
   };
 
@@ -154,7 +205,7 @@ const App: React.FC = () => {
     client.requestAccessToken();
   };
 
-  const handleCloneToDrive = async () => {
+  const handleCloneToDrive = async (e: React.MouseEvent) => {
     if (!repo) return;
     if (!googleUser) {
         handleGoogleLogin();
@@ -164,7 +215,7 @@ const App: React.FC = () => {
       setStatus(AppStatus.CLONING);
       setCloneProgress('Buscando estrutura de arquivos...');
       const tree = await fetchFullTree(repo.owner.login, repo.name, repo.default_branch);
-      const rootFolderId = await createDriveFolder(googleUser.access_token, `GitMind_${repo.name}_${Date.now()}`);
+      const rootFolderId = await createDriveFolder(googleUser.access_token, `ArquiCode_${repo.name}_${Date.now()}`);
       const folderMap = new Map<string, string>();
       folderMap.set('', rootFolderId);
 
@@ -215,13 +266,13 @@ const App: React.FC = () => {
       <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setStatus(AppStatus.IDLE)}>
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
               </svg>
             </div>
             <div className="hidden sm:block">
-              <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">GitMind</h1>
+              <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-cyan-300 bg-clip-text text-transparent">ArquiCode</h1>
               <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Explorer</p>
             </div>
           </div>
@@ -287,11 +338,11 @@ const App: React.FC = () => {
         {status === AppStatus.CLONING && (
           <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur flex items-center justify-center">
              <div className="text-center bg-slate-900 p-10 rounded-3xl border border-slate-800 shadow-2xl max-w-sm">
-                <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
+                <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
                 <h3 className="text-xl font-bold mb-2">Copiando Arquivos</h3>
                 <p className="text-slate-400 text-sm mb-4 leading-relaxed">{cloneProgress}</p>
                 <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                    <div className="bg-blue-500 h-full animate-pulse w-full"></div>
+                    <div className="bg-indigo-500 h-full animate-pulse w-full"></div>
                 </div>
              </div>
           </div>
@@ -301,25 +352,25 @@ const App: React.FC = () => {
           <>
             <div className="text-center mb-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
                 <h2 className="text-5xl font-extrabold mb-6 tracking-tight leading-tight">
-                    Análise Inteligente de <br />
-                    <span className="text-blue-500">Repositórios GitHub.</span>
+                    Entenda a <span className="text-indigo-500">arquitetura</span> <br />
+                    por trás do código.
                 </h2>
                 <p className="text-slate-400 max-w-3xl mx-auto text-lg mb-4">
-                    Explore projetos de código aberto, entenda arquiteturas complexas e receba sugestões 
-                    de um arquiteto sênior movido pelo Gemini 3 Flash.
+                    Explore projetos de código aberto, entenda estruturas complexas e receba insights 
+                    de um arquiteto sênior movido pela inteligência do Gemini.
                 </p>
                 <div className="flex flex-wrap justify-center gap-6 mt-8 text-xs font-bold uppercase tracking-widest text-slate-500">
                     <div className="flex items-center space-x-2">
-                        <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
-                        <span>Análise Instantânea</span>
+                        <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
+                        <span>Análise de Padrões</span>
                     </div>
                     <div className="flex items-center space-x-2">
                         <span className="w-1.5 h-1.5 bg-cyan-500 rounded-full"></span>
-                        <span>Backup no Google Drive</span>
+                        <span>Backup Estruturado</span>
                     </div>
                     <div className="flex items-center space-x-2">
                         <span className="w-1.5 h-1.5 bg-purple-500 rounded-full"></span>
-                        <span>Edição Assistida</span>
+                        <span>Sugestões de Refatoração</span>
                     </div>
                 </div>
             </div>
@@ -330,12 +381,12 @@ const App: React.FC = () => {
               <div className="lg:col-span-3 space-y-8">
                 <div>
                     <h2 className="text-xl font-bold mb-6 flex items-center">
-                        <span className="w-2 h-6 bg-blue-600 rounded-full mr-3"></span>
+                        <span className="w-2 h-6 bg-indigo-600 rounded-full mr-3"></span>
                         Projetos Recentes
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {history.length > 0 ? history.map(log => (
-                        <div key={log.id} onClick={() => handleImport(log.id)} className="bg-slate-900/50 border border-slate-800 p-5 rounded-2xl flex items-center space-x-4 cursor-pointer hover:border-blue-500/50 hover:bg-slate-900 transition-all group">
+                        <div key={log.id} onClick={() => handleImport(log.id)} className="bg-slate-900/50 border border-slate-800 p-5 rounded-2xl flex items-center space-x-4 cursor-pointer hover:border-indigo-500/50 hover:bg-slate-900 transition-all group">
                         <img src={log.avatar} className="w-12 h-12 rounded-xl border border-slate-700 group-hover:scale-105 transition" alt="" />
                         <div className="flex-1 min-w-0">
                             <p className="font-bold truncate text-sm text-slate-100">{log.name}</p>
@@ -343,7 +394,7 @@ const App: React.FC = () => {
                         </div>
                         <div className="text-right">
                             <span className="text-[10px] text-slate-600 block mb-1">{new Date(log.timestamp).toLocaleDateString()}</span>
-                            <svg className="w-4 h-4 text-slate-700 group-hover:text-blue-500 ml-auto transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                            <svg className="w-4 h-4 text-slate-700 group-hover:text-indigo-500 ml-auto transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
                         </div>
                         </div>
                     )) : (
@@ -359,7 +410,7 @@ const App: React.FC = () => {
                 <div>
                     <h2 className="text-xl font-bold mb-6 flex items-center">
                         <span className="w-2 h-6 bg-purple-600 rounded-full mr-3"></span>
-                        Exemplos Populares
+                        Exemplos de Referência
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {EXAMPLES.map((ex, i) => (
@@ -377,7 +428,7 @@ const App: React.FC = () => {
               <div className="lg:col-span-1">
                 <h2 className="text-xl font-bold mb-6 flex items-center">
                   <span className="w-2 h-6 bg-cyan-600 rounded-full mr-3"></span>
-                  Principais Stacks
+                  Stacks Analisadas
                 </h2>
                 <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
                   {ranking.map(([cat, count], idx) => (
@@ -424,7 +475,7 @@ const App: React.FC = () => {
                   </div>
                </div>
                <div className="mt-6 md:mt-0 flex items-center space-x-3">
-                  <button onClick={handleCloneToDrive} className="flex items-center space-x-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-xl text-sm font-bold shadow-xl shadow-blue-900/20 transition-all active:scale-95">
+                  <button onClick={handleCloneToDrive} className="flex items-center space-x-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-xl text-sm font-bold shadow-xl shadow-indigo-900/20 transition-all active:scale-95">
                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/></svg>
                     <span>Salvar no Drive</span>
                   </button>
@@ -448,13 +499,36 @@ const App: React.FC = () => {
                         parts.pop();
                         const p = parts.join('/');
                         fetchRepoContents(repo.owner.login, repo.name, p).then(f => { setFiles(f); setCurrentPath(p); });
-                    }} className="text-[10px] font-bold text-blue-400 bg-blue-900/20 px-2 py-1 rounded border border-blue-900/30 hover:bg-blue-900/40 transition">VOLTAR</button>}
+                    }} className="text-[10px] font-bold text-indigo-400 bg-indigo-900/20 px-2 py-1 rounded border border-indigo-900/30 hover:bg-indigo-900/40 transition">VOLTAR</button>}
                  </div>
                  <div className="flex-1 overflow-y-auto p-3 space-y-1">
                     {files.map(f => (
-                      <div key={f.path} onClick={() => handleFileClick(f)} className={`p-3 rounded-xl cursor-pointer text-sm flex items-center space-x-3 transition-all border ${selectedFile?.path === f.path ? 'bg-blue-600/10 text-blue-400 border-blue-600/30' : 'hover:bg-slate-800 text-slate-400 border-transparent hover:border-slate-700'}`}>
-                        <span className="text-lg">{f.type === 'dir' ? '📁' : '📄'}</span>
-                        <span className="truncate flex-1">{f.name}</span>
+                      <div key={f.path} className="group relative">
+                        <div 
+                          onClick={() => handleFileClick(f)} 
+                          className={`p-3 rounded-xl cursor-pointer text-sm flex items-center space-x-3 transition-all border ${selectedFile?.path === f.path ? 'bg-indigo-600/10 text-indigo-400 border-indigo-600/30' : 'hover:bg-slate-800 text-slate-400 border-transparent hover:border-slate-700'}`}
+                        >
+                          <span className="text-lg">{f.type === 'dir' ? '📁' : '📄'}</span>
+                          <span className="truncate flex-1">{f.name}</span>
+                        </div>
+                        
+                        {/* File actions */}
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button 
+                            title="Renomear" 
+                            onClick={(e) => { e.stopPropagation(); handleMoveOrRename(f, true); }} 
+                            className="p-1.5 bg-slate-700 hover:bg-slate-600 rounded-md text-slate-300 hover:text-white transition"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                          </button>
+                          <button 
+                            title="Mover" 
+                            onClick={(e) => { e.stopPropagation(); handleMoveOrRename(f, false); }} 
+                            className="p-1.5 bg-slate-700 hover:bg-slate-600 rounded-md text-slate-300 hover:text-white transition"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+                          </button>
+                        </div>
                       </div>
                     ))}
                  </div>
@@ -474,15 +548,15 @@ const App: React.FC = () => {
                     </div>
 
                     <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl shadow-2xl relative">
-                      <div className="absolute top-4 right-4 text-[10px] font-bold text-cyan-600 uppercase tracking-widest animate-pulse">Inteligência Ativa</div>
+                      <div className="absolute top-4 right-4 text-[10px] font-bold text-cyan-600 uppercase tracking-widest animate-pulse">Arquiteto Virtual Ativo</div>
                       <h3 className="text-xl font-extrabold mb-6 flex items-center">
                         <span className="w-2 h-6 bg-cyan-500 rounded-full mr-3"></span>
-                        Arquiteto Assistente
+                        Insights Arquiteturais
                       </h3>
                       <div className="flex space-x-3">
                         <input 
                           type="text" 
-                          placeholder="Pergunte sobre lógica, refatoração ou bugs..."
+                          placeholder="Pergunte sobre padrões de projeto, acoplamento ou melhorias..."
                           className="flex-1 bg-slate-950 border border-slate-800 rounded-2xl px-5 py-4 text-sm focus:outline-none focus:border-cyan-500 transition shadow-inner"
                           onKeyDown={(e) => { if(e.key === 'Enter') {
                             const q = (e.target as HTMLInputElement).value;
@@ -499,7 +573,7 @@ const App: React.FC = () => {
                       
                       {isAsking && (
                         <div className="mt-8 text-center animate-pulse">
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">O Gemini está lendo seu código...</p>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Analisando complexidade...</p>
                         </div>
                       )}
 
@@ -513,9 +587,9 @@ const App: React.FC = () => {
                                     disabled={status === AppStatus.COMMITTING}
                                     className="w-full py-4 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-2xl text-xs font-bold uppercase tracking-widest transition shadow-lg shadow-green-900/20"
                                 >
-                                {status === AppStatus.COMMITTING ? 'Sincronizando...' : 'Aplicar Código no GitHub'}
+                                {status === AppStatus.COMMITTING ? 'Sincronizando...' : 'Aplicar Sugestão no GitHub'}
                                 </button>
-                                <p className="text-[10px] text-slate-600 text-center mt-3 uppercase tracking-tighter">O commit será feito na branch padrão usando seu token.</p>
+                                <p className="text-[10px] text-slate-600 text-center mt-3 uppercase tracking-tighter">O commit será identificado como ArquiCode Explorer.</p>
                              </div>
                           )}
                         </div>
@@ -525,8 +599,8 @@ const App: React.FC = () => {
                 ) : (
                   <div className="h-full min-h-[400px] flex flex-col items-center justify-center bg-slate-900/50 border-2 border-dashed border-slate-800 rounded-3xl text-slate-500 animate-in fade-in duration-1000">
                     <svg className="w-20 h-20 mb-6 opacity-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                    <p className="text-lg font-medium">Pronto para mergulhar no código?</p>
-                    <p className="text-sm mt-2">Selecione um arquivo para iniciar a análise assistida.</p>
+                    <p className="text-lg font-medium">Pronto para entender este código?</p>
+                    <p className="text-sm mt-2">Selecione um arquivo para iniciar a inspeção arquitetural.</p>
                   </div>
                 )}
               </div>
@@ -538,28 +612,28 @@ const App: React.FC = () => {
       <footer className="mt-24 border-t border-slate-900 py-16 bg-slate-950/80">
           <div className="container mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-12 text-center md:text-left">
             <div>
-                <h4 className="font-bold text-white mb-4 uppercase tracking-widest text-xs text-blue-500">GitMind Explorer</h4>
+                <h4 className="font-bold text-white mb-4 uppercase tracking-widest text-xs text-indigo-500">ArquiCode Explorer</h4>
                 <p className="text-slate-500 text-sm leading-relaxed">
-                    A ferramenta definitiva para desenvolvedores que buscam entender o ecossistema open-source com precisão cirúrgica e IA de ponta.
+                    Entenda a arquitetura por trás do código. A plataforma essencial para quem busca excelência técnica e compreensão profunda de sistemas.
                 </p>
             </div>
             <div>
-                <h4 className="font-bold text-white mb-4 uppercase tracking-widest text-xs text-cyan-500">Tecnologias</h4>
+                <h4 className="font-bold text-white mb-4 uppercase tracking-widest text-xs text-cyan-500">Stack de Inteligência</h4>
                 <div className="flex flex-wrap justify-center md:justify-start gap-4">
-                    <span className="text-slate-400 text-sm font-medium border-b border-slate-800 pb-1">Gemini 3 Flash</span>
-                    <span className="text-slate-400 text-sm font-medium border-b border-slate-800 pb-1">GitHub API</span>
-                    <span className="text-slate-400 text-sm font-medium border-b border-slate-800 pb-1">Google Drive v3</span>
+                    <span className="text-slate-400 text-sm font-medium border-b border-slate-800 pb-1">Gemini AI Models</span>
+                    <span className="text-slate-400 text-sm font-medium border-b border-slate-800 pb-1">GitHub REST v3</span>
+                    <span className="text-slate-400 text-sm font-medium border-b border-slate-800 pb-1">Google Drive API</span>
                 </div>
             </div>
             <div>
-                <h4 className="font-bold text-white mb-4 uppercase tracking-widest text-xs text-purple-500">Privacidade</h4>
+                <h4 className="font-bold text-white mb-4 uppercase tracking-widest text-xs text-purple-500">Segurança</h4>
                 <p className="text-slate-600 text-xs leading-relaxed">
-                    Seus tokens são armazenados localmente (localStorage). Nenhuma credencial é enviada para nossos servidores, apenas para as APIs oficiais do Google e GitHub.
+                    Sua privacidade é prioridade. Tokens e histórico são mantidos localmente no seu navegador via localStorage.
                 </p>
             </div>
           </div>
           <div className="text-center mt-12 border-t border-slate-900 pt-8">
-            <p className="text-[10px] text-slate-700 uppercase tracking-[0.2em] font-bold">© 2025 GitMind — Analise, Clone, Evolua.</p>
+            <p className="text-[10px] text-slate-700 uppercase tracking-[0.2em] font-bold">© 2025 ArquiCode — Domine a estrutura. Evolua o código.</p>
           </div>
       </footer>
     </div>
