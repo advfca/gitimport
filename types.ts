@@ -10,6 +10,7 @@ export interface GithubRepo {
     avatar_url: string;
   };
   html_url: string;
+  default_branch: string;
 }
 
 export interface GithubFile {
@@ -17,7 +18,17 @@ export interface GithubFile {
   path: string;
   type: 'file' | 'dir';
   content?: string;
+  sha?: string;
   download_url?: string;
+}
+
+export interface GithubTreeItem {
+  path: string;
+  mode: string;
+  type: 'blob' | 'tree';
+  sha: string;
+  size?: number;
+  url: string;
 }
 
 export interface AnalysisResult {
@@ -27,12 +38,23 @@ export interface AnalysisResult {
   suggestions: string[];
 }
 
+export interface ProjectLog {
+  id: string;
+  name: string;
+  owner: string;
+  category: string;
+  timestamp: number;
+  avatar: string;
+}
+
 export enum AppStatus {
   IDLE = 'IDLE',
   LOADING_REPO = 'LOADING_REPO',
   ANALYZING = 'ANALYZING',
   READY = 'READY',
-  ERROR = 'ERROR'
+  ERROR = 'ERROR',
+  CLONING = 'CLONING',
+  COMMITTING = 'COMMITTING'
 }
 
 export interface ExampleRepo {
@@ -41,4 +63,9 @@ export interface ExampleRepo {
   url: string;
   category: string;
   icon: string;
+}
+
+export interface GoogleUser {
+  access_token: string;
+  expires_in: number;
 }
