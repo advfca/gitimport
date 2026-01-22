@@ -3,7 +3,8 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { AnalysisResult } from "../types";
 
 export const analyzeProject = async (repoInfo: any, readmeContent: string): Promise<AnalysisResult> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  // Fix: Initialize GoogleGenAI with a named parameter object and process.env.API_KEY directly.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const prompt = `
     Analise o seguinte projeto do GitHub:
@@ -16,7 +17,8 @@ export const analyzeProject = async (repoInfo: any, readmeContent: string): Prom
   `;
 
   const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    // Fix: Using gemini-3-pro-preview for complex architectural analysis tasks.
+    model: "gemini-3-pro-preview",
     contents: prompt,
     config: {
       systemInstruction: "Você é um arquiteto de software sênior. Analise o projeto e retorne um objeto JSON estruturado.",
@@ -42,19 +44,24 @@ export const analyzeProject = async (repoInfo: any, readmeContent: string): Prom
     }
   });
 
-  return JSON.parse(response.text);
+  // Fix: Accessing .text as a property.
+  const text = response.text || "{}";
+  return JSON.parse(text);
 };
 
 export const askAboutFile = async (fileName: string, content: string, question: string): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  // Fix: Initialize GoogleGenAI with a named parameter object and process.env.API_KEY directly.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    // Fix: Using gemini-3-pro-preview for code analysis questions.
+    model: "gemini-3-pro-preview",
     contents: `Arquivo: ${fileName}\n\nConteúdo:\n${content.substring(0, 8000)}\n\nPergunta: ${question}`,
     config: {
       systemInstruction: "Você é um desenvolvedor especialista em análise de código. Responda em Português do Brasil de forma didática."
     }
   });
 
-  return response.text;
+  // Fix: Accessing .text as a property.
+  return response.text || "";
 };

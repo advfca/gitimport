@@ -54,26 +54,55 @@ export const fetchFileRaw = async (downloadUrl: string): Promise<string> => {
   return response.text();
 };
 
-export const updateFileContent = async (
+export const deleteFile = async (
   token: string,
   owner: string,
   repo: string,
   path: string,
-  content: string,
   sha: string,
   message: string
 ) => {
   const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`, {
-    method: 'PUT',
+    method: 'DELETE',
     headers: {
       'Authorization': `token ${token}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       message,
-      content: btoa(unescape(encodeURIComponent(content))), // Unicode safe base64
       sha
     })
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Erro ao deletar arquivo');
+  }
+  return response.json();
+};
+
+export const updateFileContent = async (
+  token: string,
+  owner: string,
+  repo: string,
+  path: string,
+  content: string,
+  sha: string | undefined,
+  message: string
+) => {
+  const body: any = {
+    message,
+    content: btoa(unescape(encodeURIComponent(content)))
+  };
+  if (sha) body.sha = sha;
+
+  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`, {
+    method: 'PUT',
+    headers: {
+      'Authorization': `token ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body)
   });
 
   if (!response.ok) {
@@ -93,41 +122,7 @@ export const moveOrRenameFile = async (
   content: string,
   message: string
 ) => {
-  // 1. Create file at new path
-  const createRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${newPath}`, {
-    method: 'PUT',
-    headers: {
-      'Authorization': `token ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      message: `Move: ${message}`,
-      content: btoa(unescape(encodeURIComponent(content)))
-    })
-  });
-
-  if (!createRes.ok) {
-    const error = await createRes.json();
-    throw new Error(`Erro ao criar no novo caminho: ${error.message}`);
-  }
-
-  // 2. Delete file at old path
-  const deleteRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${oldPath}`, {
-    method: 'DELETE',
-    headers: {
-      'Authorization': `token ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      message: `Delete old file: ${message}`,
-      sha: sha
-    })
-  });
-
-  if (!deleteRes.ok) {
-    const error = await deleteRes.json();
-    throw new Error(`Arquivo movido, mas erro ao deletar original: ${error.message}`);
-  }
-
+  await updateFileContent(token, owner, repo, newPath, content, undefined, `Move from ${oldPath}: ${message}`);
+  await deleteFile(token, owner, repo, oldPath, sha, `Cleanup after move to ${newPath}: ${message}`);
   return true;
 };
