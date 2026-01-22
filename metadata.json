@@ -1,0 +1,8 @@
+{
+  "name": "GitMind Explorer",
+  "description": "Um explorador de repositórios GitHub com análise inteligente via Gemini. Importe seus projetos colando o link e receba resumos e explicações instantâneas.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
