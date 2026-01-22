@@ -50,12 +50,16 @@ const App: React.FC = () => {
 
   const handleImport = async (url: string) => {
     try {
-      setStatus(AppStatus.LOADING_REPO);
+      // Limpa estados antes de começar
       setError(null);
       setRepo(null);
       setAnalysis(null);
       setFiles([]);
       setSelectedFile(null);
+      setFileContent('');
+      setAnswer('');
+      
+      setStatus(AppStatus.LOADING_REPO);
       
       const repoData = await fetchRepoInfo(url);
       setRepo(repoData);
@@ -76,9 +80,10 @@ const App: React.FC = () => {
       setStatus(AppStatus.READY);
       
     } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Erro inesperado ao importar o repositório');
+      console.error("Erro na importação:", err);
+      setError(err.message || 'Ocorreu um erro desconhecido ao tentar acessar o GitHub.');
       setStatus(AppStatus.ERROR);
+      setRepo(null); 
     }
   };
 
@@ -92,18 +97,19 @@ const App: React.FC = () => {
       setFileContent(content);
       setAnswer('');
     } catch (err) {
-      setFileContent('Erro ao carregar arquivo.');
+      setFileContent('Não foi possível carregar o arquivo. O link de download pode ter expirado.');
     }
   };
 
   const handleAskAI = async (question: string) => {
-    if (!selectedFile || !fileContent) return;
+    if (!selectedFile || !fileContent || !question.trim()) return;
     setIsAsking(true);
+    setAnswer('');
     try {
       const res = await askAboutFile(selectedFile.name, fileContent, question);
       setAnswer(res);
     } catch (err) {
-      setAnswer('Houve um erro ao consultar a IA.');
+      setAnswer('Infelizmente, houve um erro ao processar sua dúvida com a IA. Tente reformular a pergunta.');
     } finally {
       setIsAsking(false);
     }
@@ -113,7 +119,11 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-blue-500/30">
       <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setStatus(AppStatus.IDLE)}>
+          <div className="flex items-center space-x-3 cursor-pointer" onClick={() => {
+            setStatus(AppStatus.IDLE);
+            setRepo(null);
+            setError(null);
+          }}>
             <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-900/20">
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
@@ -132,15 +142,15 @@ const App: React.FC = () => {
       </header>
 
       <main className="container mx-auto px-6 py-12">
-        {status === AppStatus.IDLE && (
+        {(status === AppStatus.IDLE || status === AppStatus.ERROR) && !repo && (
           <div className="text-center mb-16 animate-in fade-in slide-in-from-bottom-4 duration-700">
             <h2 className="text-5xl font-extrabold mb-6 tracking-tight leading-tight">
-              Importe seus projetos do GitHub <br />
-              <span className="text-blue-500">e deixe a IA explicar tudo.</span>
+              Análise Inteligente de <br />
+              <span className="text-blue-500">Repositórios GitHub.</span>
             </h2>
             <p className="text-slate-400 max-w-2xl mx-auto text-lg mb-10">
-              Analise arquitetura, detecte tecnologias e tire dúvidas sobre códigos específicos 
-              usando o poder do Gemini 3.
+              Descubra a tecnologia por trás dos melhores projetos. Cole o link e receba 
+              um relatório completo gerado pelo Gemini 3.
             </p>
           </div>
         )}
@@ -150,14 +160,26 @@ const App: React.FC = () => {
           isLoading={status === AppStatus.LOADING_REPO || status === AppStatus.ANALYZING} 
         />
 
-        {status === AppStatus.IDLE && (
+        {error && (
+          <div className="max-w-3xl mx-auto mb-8 p-4 bg-red-900/20 border border-red-500/50 rounded-lg text-red-400 flex items-start space-x-3 shadow-lg shadow-red-900/10 animate-in shake duration-500">
+            <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <div>
+              <span className="text-sm font-semibold">Ops! Algo deu errado:</span>
+              <p className="text-sm mt-1 text-red-300 opacity-90">{error}</p>
+            </div>
+          </div>
+        )}
+
+        {(status === AppStatus.IDLE || status === AppStatus.ERROR) && !repo && (
           <div className="max-w-4xl mx-auto mt-16 animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-200">
             <div className="flex items-center justify-between mb-8">
               <h3 className="text-xl font-semibold text-slate-200 flex items-center">
                 <svg className="w-5 h-5 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
                 </svg>
-                Comece por um exemplo
+                Comece por um exemplo público
               </h3>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -184,15 +206,6 @@ const App: React.FC = () => {
                 </button>
               ))}
             </div>
-          </div>
-        )}
-
-        {error && (
-          <div className="mb-8 p-4 bg-red-900/20 border border-red-500/50 rounded-lg text-red-400 flex items-center space-x-3">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            <span>{error}</span>
           </div>
         )}
 
@@ -225,11 +238,12 @@ const App: React.FC = () => {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               <div className="lg:col-span-1 bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden h-[600px] flex flex-col shadow-xl">
-                <div className="p-4 bg-slate-800/50 border-b border-slate-700 font-semibold text-slate-200">
-                  Arquivos do Projeto
+                <div className="p-4 bg-slate-800/50 border-b border-slate-700 font-semibold text-slate-200 flex justify-between items-center">
+                  <span>Arquivos</span>
+                  <span className="text-[10px] text-slate-500 px-2 py-0.5 bg-slate-950 rounded border border-slate-800 uppercase tracking-tighter">Root</span>
                 </div>
-                <div className="flex-1 overflow-y-auto p-2">
-                  {files.map((file) => (
+                <div className="flex-1 overflow-y-auto p-2 scroll-smooth">
+                  {files.length > 0 ? files.map((file) => (
                     <button
                       key={file.path}
                       onClick={() => handleFileClick(file)}
@@ -240,29 +254,33 @@ const App: React.FC = () => {
                       }`}
                     >
                       {file.type === 'dir' ? (
-                        <svg className="w-5 h-5 text-yellow-500" fill="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-5 h-5 text-yellow-500 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"></path>
                         </svg>
                       ) : (
-                        <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-5 h-5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
                         </svg>
                       )}
                       <span className="truncate flex-1 text-sm">{file.name}</span>
                     </button>
-                  ))}
+                  )) : (
+                    <div className="p-8 text-center text-slate-500 italic text-sm">
+                      Nenhum arquivo encontrado na raiz deste repositório.
+                    </div>
+                  )}
                 </div>
               </div>
 
               <div className="lg:col-span-2 space-y-6">
                 {selectedFile ? (
                   <>
-                    <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-2xl">
+                    <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
                       <div className="p-4 bg-slate-800/50 border-b border-slate-700 flex items-center justify-between">
-                        <span className="font-mono text-sm text-cyan-400">{selectedFile.name}</span>
-                        <span className="text-xs text-slate-500">Visualização de código</span>
+                        <span className="font-mono text-sm text-cyan-400 truncate max-w-[80%]">{selectedFile.name}</span>
+                        <span className="text-xs text-slate-500 hidden sm:inline">Visualização de código</span>
                       </div>
-                      <pre className="p-6 text-sm font-mono overflow-x-auto bg-slate-950 h-[400px] text-slate-300">
+                      <pre className="p-6 text-sm font-mono overflow-x-auto bg-slate-950 h-[400px] text-slate-300 selection:bg-cyan-500/30">
                         <code>{fileContent}</code>
                       </pre>
                     </div>
@@ -278,38 +296,24 @@ const App: React.FC = () => {
                         <svg className="w-5 h-5 mr-2 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                         </svg>
-                        Pergunte à IA sobre este arquivo
+                        Tire dúvidas sobre este arquivo
                       </h3>
                       <div className="flex flex-wrap gap-2 mb-4">
-                        <button 
-                          onClick={() => handleAskAI('O que este código faz?')}
-                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs text-slate-300 transition"
-                        >
-                          O que este código faz?
-                        </button>
-                        <button 
-                          onClick={() => handleAskAI('Quais os possíveis erros ou bugs aqui?')}
-                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs text-slate-300 transition"
-                        >
-                          Possíveis bugs?
-                        </button>
-                        <button 
-                          onClick={() => handleAskAI('Como posso melhorar a performance deste arquivo?')}
-                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs text-slate-300 transition"
-                        >
-                          Melhorar performance
-                        </button>
-                        <button 
-                          onClick={() => handleAskAI('Explique as principais funções/métodos deste arquivo.')}
-                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs text-slate-300 transition"
-                        >
-                          Explicar lógica
-                        </button>
+                        {['O que este código faz?', 'Possíveis bugs?', 'Como melhorar?', 'Explicar lógica'].map(q => (
+                          <button 
+                            key={q}
+                            onClick={() => handleAskAI(q)}
+                            disabled={isAsking}
+                            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs text-slate-300 transition disabled:opacity-50"
+                          >
+                            {q}
+                          </button>
+                        ))}
                       </div>
                       <div className="flex space-x-2">
                         <input 
                           type="text" 
-                          placeholder="Sua pergunta personalizada..."
+                          placeholder="Pergunte algo personalizado..."
                           className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-slate-200 focus:outline-none focus:border-cyan-500 transition shadow-inner"
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') handleAskAI(e.currentTarget.value);
@@ -356,7 +360,7 @@ const App: React.FC = () => {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                     </svg>
                     <p className="font-medium">Selecione um arquivo ao lado para começar</p>
-                    <p className="text-sm mt-1">A IA está pronta para explicar qualquer arquivo selecionado.</p>
+                    <p className="text-sm mt-1">A IA explicará a lógica e sugerirá melhorias.</p>
                   </div>
                 )}
               </div>
@@ -368,21 +372,20 @@ const App: React.FC = () => {
       <footer className="mt-24 border-t border-slate-900 py-12 bg-slate-950/50">
         <div className="container mx-auto px-6 text-center">
           <p className="text-slate-500 text-sm">
-            Para importar seu projeto, basta copiar o link da página principal do repositório no GitHub 
-            (ex: github.com/seu-usuario/seu-projeto) e colar no campo de busca acima.
+            Nota: Este explorador utiliza a API pública do GitHub e atualmente suporta apenas <strong>repositórios públicos</strong>.
           </p>
           <div className="mt-8 flex justify-center space-x-8">
             <div className="flex flex-col items-center">
-               <span className="text-slate-400 font-bold text-lg">100%</span>
-               <span className="text-[10px] text-slate-600 uppercase tracking-widest font-bold">Open Source</span>
+               <span className="text-slate-400 font-bold text-lg">GitHub API</span>
+               <span className="text-[10px] text-slate-600 uppercase tracking-widest font-bold">Data Source</span>
             </div>
             <div className="flex flex-col items-center border-l border-slate-800 pl-8">
                <span className="text-slate-400 font-bold text-lg">Gemini 3</span>
-               <span className="text-[10px] text-slate-600 uppercase tracking-widest font-bold">Powered Intelligence</span>
+               <span className="text-[10px] text-slate-600 uppercase tracking-widest font-bold">Artificial Intelligence</span>
             </div>
           </div>
           <p className="mt-8 text-slate-700 text-[10px] uppercase tracking-widest font-bold">
-            © 2025 GitMind Explorer — Built for Developers
+            © 2025 GitMind Explorer — Transformando código em conhecimento
           </p>
         </div>
       </footer>
