@@ -18,6 +18,7 @@ const App: React.FC = () => {
   const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
   const [repo, setRepo] = useState<GithubRepo | null>(null);
   const [files, setFiles] = useState<GithubFile[]>([]);
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [currentPath, setCurrentPath] = useState<string>('');
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [selectedFile, setSelectedFile] = useState<GithubFile | null>(null);
@@ -74,6 +75,15 @@ const App: React.FC = () => {
       .slice(0, 5);
   }, [history]);
 
+  const filteredFiles = useMemo(() => {
+    if (!searchQuery.trim()) return files;
+    const query = searchQuery.toLowerCase();
+    return files.filter(f => 
+      f.name.toLowerCase().includes(query) || 
+      f.path.toLowerCase().includes(query)
+    );
+  }, [files, searchQuery]);
+
   const handleLogout = () => {
     setGhToken('');
     setGoogleUser(null);
@@ -86,6 +96,7 @@ const App: React.FC = () => {
       setRepo(null);
       setAnalysis(null);
       setFiles([]);
+      setSearchQuery('');
       setCurrentPath('');
       setSelectedFile(null);
       setFileContent('');
@@ -127,6 +138,7 @@ const App: React.FC = () => {
       const newFiles = await fetchRepoContents(repo!.owner.login, repo!.name, file.path);
       setFiles(newFiles);
       setCurrentPath(file.path);
+      setSearchQuery('');
       return;
     }
     try {
@@ -343,26 +355,56 @@ const App: React.FC = () => {
                         const parts = currentPath.split('/');
                         parts.pop();
                         const p = parts.join('/');
-                        fetchRepoContents(repo.owner.login, repo.name, p).then(f => { setFiles(f); setCurrentPath(p); });
+                        fetchRepoContents(repo.owner.login, repo.name, p).then(f => { setFiles(f); setCurrentPath(p); setSearchQuery(''); });
                     }} className="text-[10px] text-indigo-400 font-bold">VOLTAR</button>}
                  </div>
+                 
+                 <div className="px-3 py-2 border-b border-slate-800 bg-slate-900/50">
+                   <div className="relative">
+                     <svg className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                     </svg>
+                     <input 
+                       type="text" 
+                       value={searchQuery}
+                       onChange={(e) => setSearchQuery(e.target.value)}
+                       placeholder="Filtrar arquivos..."
+                       className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-indigo-500/50 transition"
+                     />
+                     {searchQuery && (
+                       <button 
+                         onClick={() => setSearchQuery('')}
+                         className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                       >
+                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                         </svg>
+                       </button>
+                     )}
+                   </div>
+                 </div>
+
                  <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                    {files.map(f => (
-                      <div key={f.path} className="group relative">
-                        <div onClick={() => handleFileClick(f)} className={`p-3 rounded-xl cursor-pointer text-sm flex items-center space-x-3 border ${selectedFile?.path === f.path ? 'bg-indigo-600/10 border-indigo-600/30 text-indigo-400' : 'border-transparent hover:bg-slate-800 text-slate-400'}`}>
-                          <span>{f.type === 'dir' ? '📁' : '📄'}</span>
-                          <span className="truncate flex-1">{f.name}</span>
+                    {filteredFiles.length > 0 ? (
+                      filteredFiles.map(f => (
+                        <div key={f.path} className="group relative">
+                          <div onClick={() => handleFileClick(f)} className={`p-3 rounded-xl cursor-pointer text-sm flex items-center space-x-3 border ${selectedFile?.path === f.path ? 'bg-indigo-600/10 border-indigo-600/30 text-indigo-400' : 'border-transparent hover:bg-slate-800 text-slate-400'}`}>
+                            <span>{f.type === 'dir' ? '📁' : '📄'}</span>
+                            <span className="truncate flex-1">{f.name}</span>
+                          </div>
+                          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex space-x-1 opacity-0 group-hover:opacity-100 transition">
+                             <button onClick={(e) => { e.stopPropagation(); handleAction(f, true); }} className="p-1.5 bg-slate-700 hover:bg-indigo-600 rounded text-white" title="Renomear">
+                               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                             </button>
+                             <button onClick={(e) => { e.stopPropagation(); handleAction(f, false); }} className="p-1.5 bg-slate-700 hover:bg-cyan-600 rounded text-white" title="Mover">
+                               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+                             </button>
+                          </div>
                         </div>
-                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex space-x-1 opacity-0 group-hover:opacity-100 transition">
-                           <button onClick={(e) => { e.stopPropagation(); handleAction(f, true); }} className="p-1.5 bg-slate-700 hover:bg-indigo-600 rounded text-white" title="Renomear">
-                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
-                           </button>
-                           <button onClick={(e) => { e.stopPropagation(); handleAction(f, false); }} className="p-1.5 bg-slate-700 hover:bg-cyan-600 rounded text-white" title="Mover">
-                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
-                           </button>
-                        </div>
-                      </div>
-                    ))}
+                      ))
+                    ) : (
+                      <div className="p-8 text-center text-slate-600 text-xs">Nenhum arquivo encontrado</div>
+                    )}
                  </div>
               </div>
 
