@@ -6,6 +6,7 @@ import { analyzeProject, askAboutFile } from './services/geminiService';
 import { createDriveFolder, uploadToDrive } from './services/googleDriveService';
 import RepoInput from './components/RepoInput';
 import AnalysisBoard from './components/AnalysisBoard';
+import hljs from 'highlight.js';
 
 const EXAMPLES: ExampleRepo[] = [
   { title: "React.js", description: "Explore a arquitetura da biblioteca de UI mais famosa.", url: "https://github.com/facebook/react", category: "Frontend", icon: "⚛️" },
@@ -27,6 +28,7 @@ const App: React.FC = () => {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [cloneProgress, setCloneProgress] = useState<string>('');
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const codeRef = useRef<HTMLElement>(null);
   
   const [history, setHistory] = useState<ProjectLog[]>(() => {
     const saved = localStorage.getItem('arquicode_history');
@@ -53,6 +55,14 @@ const App: React.FC = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Effect to apply highlighting whenever fileContent changes
+  useEffect(() => {
+    if (codeRef.current && fileContent) {
+      delete codeRef.current.dataset.highlighted;
+      hljs.highlightElement(codeRef.current);
+    }
+  }, [fileContent]);
 
   const ranking = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -271,7 +281,6 @@ const App: React.FC = () => {
                 </p>
             </div>
 
-            {/* Fix: Removed AppStatus.ANALYZING from the isLoading condition because it's unreachable in this block due to the outer !repo check. */}
             <RepoInput onSearch={handleImport} isLoading={status === AppStatus.LOADING_REPO} />
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
@@ -365,8 +374,8 @@ const App: React.FC = () => {
                          <span className="text-xs font-mono text-indigo-400 truncate">{selectedFile.path}</span>
                          <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Visualizador de Código</span>
                       </div>
-                      <pre className="p-6 text-xs font-mono overflow-auto h-[350px] bg-slate-950/50">
-                        <code className="text-slate-300 leading-relaxed">{fileContent}</code>
+                      <pre className="p-6 text-xs font-mono overflow-auto h-[350px] bg-slate-950/50 scrollbar-thin scrollbar-thumb-slate-800">
+                        <code ref={codeRef} className="text-slate-300 leading-relaxed">{fileContent}</code>
                       </pre>
                     </div>
 
