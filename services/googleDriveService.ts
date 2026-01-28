@@ -43,3 +43,11 @@ export const uploadToDrive = async (accessToken: string, name: string, content: 
     throw new Error(data.error?.message || 'Erro ao fazer upload para o Drive');
   }
 };
+
+export const fetchDriveFileContent = async (accessToken: string, fileId: string): Promise<string> => {
+  const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+    headers: { 'Authorization': `Bearer ${accessToken}` }
+  });
+  if (!response.ok) throw new Error("Não foi possível baixar o arquivo do Drive");
+  return response.text();
+};

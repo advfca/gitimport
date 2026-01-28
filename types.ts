@@ -20,6 +20,7 @@ export interface GithubFile {
   content?: string;
   sha?: string;
   download_url?: string;
+  localFile?: File; // Referência para arquivos locais
 }
 
 export interface GithubTreeItem {
@@ -63,6 +64,7 @@ export enum AppStatus {
   LOADING_REPO = 'LOADING_REPO',
   ANALYZING = 'ANALYZING',
   CONVERTING = 'CONVERTING',
+  UPLOADING = 'UPLOADING',
   READY = 'READY',
   ERROR = 'ERROR',
   CLONING = 'CLONING',
