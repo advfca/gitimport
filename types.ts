@@ -38,6 +38,17 @@ export interface AnalysisResult {
   suggestions: string[];
 }
 
+export interface ConversionResult {
+  phpStructure: string;
+  apiEndpoints: Array<{
+    method: string;
+    route: string;
+    phpController: string;
+  }>;
+  reactUpdates: string;
+  setupGuide: string;
+}
+
 export interface ProjectLog {
   id: string;
   name: string;
@@ -51,6 +62,7 @@ export enum AppStatus {
   IDLE = 'IDLE',
   LOADING_REPO = 'LOADING_REPO',
   ANALYZING = 'ANALYZING',
+  CONVERTING = 'CONVERTING',
   READY = 'READY',
   ERROR = 'ERROR',
   CLONING = 'CLONING',
