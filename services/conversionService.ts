@@ -9,53 +9,56 @@ export const convertToReactPhp = async (
 ): Promise<ConversionResult> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
-  // Pegamos uma amostra dos arquivos mais importantes para dar contexto ao Gemini
-  const relevantFiles = files
+  const relevantFilesInfo = files
     .filter(f => f.name.endsWith('.ts') || f.name.endsWith('.tsx') || f.name.endsWith('.json'))
-    .slice(0, 8);
+    .slice(0, 10)
+    .map(f => f.path)
+    .join(', ');
 
   const contextPrompt = `
-    Você é um Engenheiro de Software Fullstack Especialista em Migrações de Sistemas.
-    OBJETIVO: Converter um projeto front-end React/TS purista em uma aplicação Híbrida "React + PHP Moderno".
+    Você é um Engenheiro de Software Fullstack Especialista.
+    Converta o projeto React/TS "${repoName}" em uma aplicação "React + PHP 8.3 Moderno".
     
-    PROJETO ORIGINAL: ${repoName}
-    ANÁLISE PRÉVIA: ${JSON.stringify(analysis)}
+    ESTRUTURA ATUAL DETECTADA: ${relevantFilesInfo}
+    ANÁLISE DE ARQUITETURA: ${JSON.stringify(analysis)}
     
     TAREFA:
-    1. Projete um back-end PHP 8.3 (utilizando padrões como Controllers, Repositories e PSR-12).
-    2. Crie uma estrutura de pastas recomendada onde o React vive no /frontend e o PHP no /api.
-    3. Identifique necessidades de Banco de Dados e crie as migrações em PHP.
-    4. Gere exemplos de como o React deve chamar esse novo back-end PHP.
-
-    Retorne APENAS um JSON válido.
+    1. Gere os arquivos PHP necessários (Controllers, Models, Routes) no padrão PSR-12.
+    2. Gere um arquivo manual de configuração detalhado em Markdown.
+    3. Retorne uma lista de objetos contendo o caminho relativo e o conteúdo completo de cada arquivo.
+    
+    Os arquivos devem seguir esta estrutura sugerida:
+    - /api/src/Controllers/
+    - /api/src/Models/
+    - /api/public/index.php
+    - /README_CONVERSION.md
   `;
 
   const response = await ai.models.generateContent({
     model: "gemini-3-pro-preview",
     contents: contextPrompt,
     config: {
-      systemInstruction: "Retorne uma resposta estritamente no formato JSON definido no schema.",
+      systemInstruction: "Retorne a conversão em formato JSON estrito. Garanta que o campo 'generatedFiles' contenha o código fonte completo dos novos arquivos PHP e o Manual.",
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
         properties: {
-          phpStructure: { type: Type.STRING, description: "Explicação da nova estrutura de pastas e arquivos PHP" },
-          apiEndpoints: {
+          summary: { type: Type.STRING },
+          phpArchitectureDescription: { type: Type.STRING },
+          generatedFiles: {
             type: Type.ARRAY,
             items: {
               type: Type.OBJECT,
               properties: {
-                method: { type: Type.STRING },
-                route: { type: Type.STRING },
-                phpController: { type: Type.STRING, description: "Exemplo de código do Controller PHP" }
+                path: { type: Type.STRING, description: "Caminho do arquivo (ex: api/src/Controllers/UserController.php)" },
+                content: { type: Type.STRING, description: "Código fonte completo do arquivo" }
               },
-              required: ["method", "route", "phpController"]
+              required: ["path", "content"]
             }
           },
-          reactUpdates: { type: Type.STRING, description: "O que mudar no React para integrar com o PHP" },
-          setupGuide: { type: Type.STRING, description: "Guia de instalação do ambiente PHP/Composer" }
+          setupGuide: { type: Type.STRING, description: "Passo a passo para rodar o projeto" }
         },
-        required: ["phpStructure", "apiEndpoints", "reactUpdates", "setupGuide"]
+        required: ["summary", "generatedFiles", "setupGuide", "phpArchitectureDescription"]
       }
     }
   });

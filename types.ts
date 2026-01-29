@@ -20,7 +20,7 @@ export interface GithubFile {
   content?: string;
   sha?: string;
   download_url?: string;
-  localFile?: File; // Referência para arquivos locais
+  localFile?: File; 
 }
 
 export interface GithubTreeItem {
@@ -39,15 +39,16 @@ export interface AnalysisResult {
   suggestions: string[];
 }
 
+export interface GeneratedFile {
+  path: string;
+  content: string;
+}
+
 export interface ConversionResult {
-  phpStructure: string;
-  apiEndpoints: Array<{
-    method: string;
-    route: string;
-    phpController: string;
-  }>;
-  reactUpdates: string;
+  summary: string;
+  generatedFiles: GeneratedFile[];
   setupGuide: string;
+  phpArchitectureDescription: string;
 }
 
 export interface ProjectLog {
